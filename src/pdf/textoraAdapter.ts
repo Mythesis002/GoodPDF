@@ -24,7 +24,7 @@ const A4_SIZE = { preset: 'A4' as const };
 export function buildPdfDocumentFromTextora(
   source: TextoraDoc,
   settings: TextoraSettings,
-  isLandscape: boolean,
+  _isLandscape: boolean,
 ): PDFDocument {
   const pages: PDFPage[] = [];
 

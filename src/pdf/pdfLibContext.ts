@@ -4,7 +4,7 @@ import type { PdfContext, Rect } from './renderer';
 // like pdf-lib or PDFKit. This avoids introducing external runtime dependencies
 // while keeping the Pro rendering pipeline pluggable.
 
-export class PdfLibContext implements PdfContext {
+export class PdfLibContextStub implements PdfContext {
   beginDocument(): void {}
 
   async endDocument(): Promise<Uint8Array> {
@@ -49,6 +49,9 @@ export class PdfLibContext implements PdfContext {
   drawShape(_options: { frame: Rect; type: string; pathData?: string; points?: { x: number; y: number }[]; rx?: number; ry?: number }): void {}
 }
 
+// Note: pdf-lib implementation commented out due to missing dependency
+// Uncomment when pdf-lib is properly installed
+/*
 import { PDFDocument as PdfLibDocument, StandardFonts, rgb } from 'pdf-lib';
 import type { PdfContext, Rect } from './renderer';
 
@@ -139,16 +142,17 @@ export class PdfLibContext implements PdfContext {
 
   drawShadow(_frame: Rect, _shadow: unknown): void {}
 
-  drawImage(_options: { src: string; frame: Rect; borderRadius?: unknown; }): void {
+  drawImage(_options: { src: string; frame: Rect; borderRadius?: unknown }): void {
     // Images can be implemented here by embedding the image bytes via pdf-lib
   }
 
   setShapeStroke(_stroke: unknown): void {}
   setShapeFill(_fill: unknown): void {}
-  drawShape(_options: { frame: Rect; type: string; pathData?: string; points?: { x: number; y: number }[]; rx?: number; ry?: number; }): void {}
+  drawShape(_options: { frame: Rect; type: string; pathData?: string; points?: { x: number; y: number }[]; rx?: number; ry?: number }): void {}
 }
 
 function parseColor(_color: string) {
   // Very simple: always return black for now; can be expanded to parse hex/rgb
   return rgb(0, 0, 0);
 }
+*/

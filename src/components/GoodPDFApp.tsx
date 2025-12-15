@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // Global type declarations for external libraries
 declare global {
@@ -8,19 +8,15 @@ declare global {
   }
 }
 import { 
-  FileText, Settings, Download, Sparkles, LayoutTemplate, 
-  Type, Palette, ChevronRight, Loader2, RefreshCcw, 
-  BookOpen, Share2, CheckCircle2, List, Maximize2, 
-  Image as ImageIcon, Save, Upload, AlertTriangle, 
-  Edit3, Table as TableIcon, Layers, Play, Columns, 
-  Quote, Calendar, BarChart3, GraduationCap, Briefcase,
-  Wand2, PaintBucket, Monitor, ImagePlus, PenTool,
-  MoveUp, MoveDown, Trash2, Plus, X, Menu, Printer,
-  MoreHorizontal, Bold, Italic, Underline, Palette as ColorPicker,
-  ChevronUp, ChevronDown, Edit, Zap, Copy, Trash2 as Delete, FilePlus, FileX,
-  Type as TypeIcon, Grid, Book, GraduationCap as GradIcon,
-  FileBadge, Lightbulb, Bookmark, ArrowRight, User,
-  PieChart, Activity, CheckCircle, Scale, Scissors, Minimize2,
+  FileText, Download, LayoutTemplate, 
+  Loader2,
+  Image as ImageIcon,
+  Wand2, Monitor,
+  Trash2 as Delete, FilePlus,
+  MoreHorizontal, ChevronUp, ChevronDown, Zap,
+  Type as TypeIcon, Book, GraduationCap as GradIcon,
+  Lightbulb,
+  Activity, CheckCircle, Scale,
   AlignLeft, AlignCenter, AlignRight
 } from 'lucide-react';
 
@@ -40,7 +36,7 @@ const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; // Get from environmen
 // 1. CORE UTILITIES
 // ==========================================
 
-const safeJSONParse = (text) => {
+const safeJSONParse = (text: string) => {
   try {
     if (!text) return null;
     let cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -220,7 +216,7 @@ const safeStr = (v: string | number | null | undefined) => {
  */
 const calculatePageBudget = (targetPages: number) => {
   // Reserve pages for cover + optional TOC
-  const hasCover = true; // Always 1 page
+  // const _hasCover = true; // Always 1 page
   const hasTOC = targetPages >= 5; // TOC only if 5+ pages
   const tocPages = hasTOC ? 1 : 0;
   
@@ -269,7 +265,7 @@ const getBlockWeight = (block: any) => {
     quote: 120
   };
   
-  return weights[block.type] || 80;
+  return weights[block.type as keyof typeof weights] || 80;
 };
 
 // ==========================================
@@ -567,6 +563,11 @@ const HoverControlPanel = ({
   const [showFormatMenu, setShowFormatMenu] = useState(false);
   const [isRewriting, setIsRewriting] = useState(false);
 
+  // Suppress unused parameter warnings
+  void block;
+  void blockIndex;
+  void pageIndex;
+
   if (!isVisible) return null;
 
   const handleAIRewrite = async () => {
@@ -729,19 +730,22 @@ const HoverControlPanel = ({
 };
 
 const PageManagementPanel = ({ 
-  pageIndex, 
+  _pageIndex, 
   totalPages, 
   onDeletePage, 
   onAddPage,
   isVisible 
 }: {
-  pageIndex: number;
+  _pageIndex: number;
   totalPages: number;
   onDeletePage: () => void;
   onAddPage: (position: 'before' | 'after') => void;
   isVisible: boolean;
 }) => {
   const [showMenu, setShowMenu] = useState(false);
+
+  // Suppress unused parameter warning
+  void _pageIndex;
 
   if (!isVisible) return null;
 
@@ -920,15 +924,15 @@ const Editable = ({
   };
 
   return (
-    <Tag
-      className={`outline-none hover:bg-black/5 transition-colors rounded ${className} ${isEditing ? 'bg-black/10' : ''}`}
-      contentEditable
-      suppressContentEditableWarning
-      onBlur={handleBlur}
-      onFocus={handleFocus}
-      style={style}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    React.createElement(Tag, {
+      className: `outline-none hover:bg-black/5 transition-colors rounded ${className} ${isEditing ? 'bg-black/10' : ''}`,
+      contentEditable: true,
+      suppressContentEditableWarning: true,
+      onBlur: handleBlur,
+      onFocus: handleFocus,
+      style: style,
+      dangerouslySetInnerHTML: { __html: html }
+    })
   );
 };
 
@@ -1123,6 +1127,10 @@ const Page = ({
 }) => {
   const [showPageControls, setShowPageControls] = useState(false);
 
+  // Suppress unused parameter warnings
+  void template;
+  // void _pageIndex; // Not needed since it's passed to child component
+
   return (
     <div 
       id={`page-${num}`} 
@@ -1132,7 +1140,7 @@ const Page = ({
       onMouseLeave={() => setShowPageControls(false)}
     >
       <PageManagementPanel
-        pageIndex={num}
+        _pageIndex={num}
         totalPages={totalPages}
         onDeletePage={onDeletePage}
         onAddPage={onAddPage}
@@ -1150,8 +1158,7 @@ const Page = ({
       <div className="flex-1 px-12 py-8 overflow-hidden relative flex flex-col justify-start">
         {React.Children.map(children, (child, index) => 
           React.isValidElement(child) ? 
-            React.cloneElement(child, {
-              blockIndex: index,
+            React.cloneElement(child as React.ReactElement<any>, {
               pageIndex: num,
               onMoveUp: () => blockOperations.onMoveBlock(num, index, 'up'),
               onMoveDown: () => blockOperations.onMoveBlock(num, index, 'down'),
@@ -1172,7 +1179,7 @@ const Page = ({
   );
 };
 
-const CoverPage = ({ template, meta }: { template: any, meta: any }) => (
+const CoverPage = ({ meta }: { template: any, meta: any }) => (
   <div id="page-0" className="relative mx-auto shadow-2xl mb-8 overflow-hidden flex flex-col origin-top tx-page-bg"
        style={{ width: '210mm', height: '297mm' }}>
     <div className="h-full flex flex-col justify-center p-20">
@@ -1203,9 +1210,9 @@ export default function GoodPDF() {
   const [step, setStep] = useState('SETUP');
   const [config, setConfig] = useState({ topic: '', type: 'report', pages: 4, template: 'modern' });
   const [architecture, setArchitecture] = useState<any>(null);
-  const [fullContent, setFullContent] = useState<any[]>([]);
+  // const [fullContent, setFullContent] = useState<any[]>([]);
   const [progress, setProgress] = useState('');
-  const [layoutMetrics, setLayoutMetrics] = useState({ scale: 1, metrics: {} });
+  const [layoutMetrics, setLayoutMetrics] = useState({ scale: 1, metrics: { utilization: '' as string | undefined, totalWeight: 0, capacity: 0, blockCount: 0 } });
   const [pageData, setPageData] = useState<any[][]>([]);
   const [isExporting, setIsExporting] = useState(false);
   
@@ -1423,7 +1430,7 @@ export default function GoodPDF() {
         allBlocks.push({ type: 'h2', text: 'References' });
         allBlocks.push({ type: 'p', text: 'Generated by GoodPDF AI Document System.' });
 
-        setFullContent(allBlocks);
+        // setFullContent(allBlocks);
         
         // OPTIMIZE & PAGINATE
         setProgress('Optimizing layout...');
@@ -1432,7 +1439,7 @@ export default function GoodPDF() {
         const pages = paginateContent(optimizedBlocks, contentPages, scale);
         
         setPageData(pages);
-        setLayoutMetrics({ scale, metrics });
+        setLayoutMetrics({ scale, metrics: { utilization: metrics.utilization || '', totalWeight: metrics.totalWeight || 0, capacity: metrics.capacity || 0, blockCount: metrics.blockCount || 0 } });
         setStep('FINISHED');
       };
       writeAll();
@@ -1473,7 +1480,7 @@ export default function GoodPDF() {
             canvas.className = img.className;
             
             // Draw the image onto canvas
-            await new Promise((resolve, reject) => {
+            await new Promise((resolve) => {
               const tempImg = new Image();
               tempImg.crossOrigin = 'anonymous';
               
@@ -1525,7 +1532,9 @@ export default function GoodPDF() {
       
       // Replace images with canvases
       imageReplacements.forEach(({ original, canvas }) => {
-        original.parentNode.replaceChild(canvas, original);
+        if (original.parentNode) {
+          original.parentNode.replaceChild(canvas, original);
+        }
       });
       
       console.log("⏳ Step 2: Waiting for render...");
@@ -1561,19 +1570,21 @@ export default function GoodPDF() {
       // STEP 4: Restore original images
       console.log("🔄 Restoring original images...");
       imageReplacements.forEach(({ original, canvas }) => {
-        canvas.parentNode.replaceChild(original, canvas);
+        if (canvas.parentNode) {
+          canvas.parentNode.replaceChild(original, canvas);
+        }
       });
       console.log("✅ Images restored");
       
     } catch (e) {
       console.error("❌ PDF export error:", e);
-      alert(`PDF export failed: ${e.message}. Check console for details.`);
+      alert(`PDF export failed: ${(e as Error).message || 'Unknown error'}. Check console for details.`);
     } finally {
       setIsExporting(false);
     }
   };
 
-  const activeTemplate = PRO_TEMPLATES[config.template];
+  const activeTemplate = PRO_TEMPLATES[config.template as keyof typeof PRO_TEMPLATES];
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans flex flex-col">
@@ -1677,7 +1688,7 @@ export default function GoodPDF() {
                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0`} style={{backgroundColor: t.colors.secondary, color: t.colors.accent}}>
                               {t.id === 'academic' && <GradIcon size={20}/>}
                               {t.id === 'modern' && <Monitor size={20}/>}
-                              {t.id === 'creative' && <Palette size={20}/>}
+                              {t.id === 'creative' && <Wand2 size={20}/>}
                               {t.id === 'minimalist' && <LayoutTemplate size={20}/>}
                            </div>
                            <div>
@@ -1735,7 +1746,7 @@ export default function GoodPDF() {
               >
                 <div className="space-y-4">
                   <h2 className="tx-heading text-2xl font-bold mb-6">Table of Contents</h2>
-                  {architecture.sections?.map((section: any, i) => (
+                  {architecture.sections?.map((section: any, i: number) => (
                     <div key={i} className="flex justify-between items-center py-2 border-b border-gray-200">
                       <span className="tx-body">{safeStr(section.title)}</span>
                       <span className="tx-body text-sm opacity-60">{i + 2}</span>

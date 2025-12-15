@@ -92,7 +92,11 @@ export interface PdfContext {
 
 // LayoutContext is responsible for resolving BoxLayout into absolute frames
 export class LayoutContext {
-  constructor(private dpi: number) {}
+  private dpi: number;
+
+  constructor(dpi: number) {
+    this.dpi = dpi;
+  }
 
   computeFrame(layout: { x?: number; y?: number; width?: number; height?: number }): Rect {
     const x = layout.x ?? 0;
@@ -102,7 +106,7 @@ export class LayoutContext {
     return { x, y, width, height };
   }
 
-  createChildContext(frame: Rect, _layout: unknown): LayoutContext {
+  createChildContext(_frame: Rect, _layout: unknown): LayoutContext {
     // Placeholder: extend to handle relative / flex layouts
     return new LayoutContext(this.dpi);
   }

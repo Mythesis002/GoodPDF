@@ -2,8 +2,11 @@ import type { PdfContext, Rect } from './renderer';
 
 export class JsPdfContext implements PdfContext {
   private doc: any;
+  private orientation: 'p' | 'l';
 
-  constructor(private orientation: 'p' | 'l' = 'p') {}
+  constructor(orientation: 'p' | 'l' = 'p') {
+    this.orientation = orientation;
+  }
 
   beginDocument(): void {
     const jsPDF = (window as any).jspdf?.jsPDF;
