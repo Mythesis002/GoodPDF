@@ -1684,7 +1684,7 @@ export default function GoodPDF() {
       <div className="flex-1 overflow-y-auto bg-gray-100 p-8 flex flex-col items-center">
         
         {step === 'SETUP' && (
-          <div className="w-full max-w-4xl bg-white p-12 rounded-3xl shadow-xl animate-in fade-in slide-in-from-bottom-8 duration-500">
+          <div>
             <div className="text-center mb-8">
                <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif' }}>Create <span style={{ color: '#FF3B30' }}>Good</span> PDF's</h1>
             </div>
