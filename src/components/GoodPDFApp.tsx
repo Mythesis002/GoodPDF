@@ -273,6 +273,14 @@ const getBlockWeight = (block: any) => {
 // ==========================================
 
 const PRO_TEMPLATES = {
+  university: {
+    id: 'university',
+    name: 'University Report',
+    description: 'Formal, Times New Roman, Standard',
+    colors: { bg: '#ffffff', text: '#000000', accent: '#000000', secondary: '#ffffff', border: '#000000' },
+    fonts: { heading: 'Times New Roman', body: 'Times New Roman' },
+    layout: { radius: '0px', cover_style: 'academic_formal' }
+  },
   academic: {
     id: 'academic',
     name: 'Academic',
