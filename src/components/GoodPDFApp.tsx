@@ -8,7 +8,7 @@ declare global {
   }
 }
 import { 
-  FileText, Download, LayoutTemplate, 
+  FileText, Download, 
   Loader2,
   Image as ImageIcon,
   Wand2, Monitor,
@@ -294,7 +294,7 @@ const PRO_TEMPLATES = {
     name: 'Modern Dark',
     description: 'High contrast, cyan highlights',
     colors: { bg: '#0f172a', text: '#f8fafc', accent: '#06b6d4', secondary: '#1e293b', border: '#334155' },
-    fonts: { heading: 'Inter', body: 'Inter' },
+    fonts: { heading: 'Space Grotesk', body: 'Inter' },
     layout: { radius: '8px', cover_style: 'bold' }
   },
   creative: {
@@ -312,6 +312,46 @@ const PRO_TEMPLATES = {
     colors: { bg: '#ffffff', text: '#000000', accent: '#000000', secondary: '#f3f4f6', border: '#e5e7eb' },
     fonts: { heading: 'Helvetica', body: 'Arial' },
     layout: { radius: '0px', cover_style: 'typographic' }
+  },
+  corporate: {
+    id: 'corporate',
+    name: 'Corporate Blue',
+    description: 'Professional navy, clear hierarchy',
+    colors: { bg: '#ffffff', text: '#0f172a', accent: '#1d4ed8', secondary: '#eff6ff', border: '#dbeafe' },
+    fonts: { heading: 'Plus Jakarta Sans', body: 'Source Sans 3' },
+    layout: { radius: '6px', cover_style: 'corporate' }
+  },
+  pastel: {
+    id: 'pastel',
+    name: 'Pastel Light',
+    description: 'Soft gradients, friendly tone',
+    colors: { bg: '#ffffff', text: '#1f2937', accent: '#ec4899', secondary: '#fdf2f8', border: '#fbcfe8' },
+    fonts: { heading: 'Poppins', body: 'Nunito' },
+    layout: { radius: '14px', cover_style: 'soft' }
+  },
+  emerald: {
+    id: 'emerald',
+    name: 'Emerald',
+    description: 'Green accents, calm and modern',
+    colors: { bg: '#ffffff', text: '#052e16', accent: '#10b981', secondary: '#ecfdf5', border: '#a7f3d0' },
+    fonts: { heading: 'Sora', body: 'Inter' },
+    layout: { radius: '10px', cover_style: 'clean' }
+  },
+  editorial: {
+    id: 'editorial',
+    name: 'Editorial',
+    description: 'Magazine feel, strong headings',
+    colors: { bg: '#fffdf8', text: '#111827', accent: '#ef4444', secondary: '#fffbeb', border: '#fde68a' },
+    fonts: { heading: 'Oswald', body: 'Roboto Slab' },
+    layout: { radius: '4px', cover_style: 'editorial' }
+  },
+  slate: {
+    id: 'slate',
+    name: 'Slate',
+    description: 'Neutral gray, understated accents',
+    colors: { bg: '#f8fafc', text: '#0f172a', accent: '#475569', secondary: '#ffffff', border: '#e2e8f0' },
+    fonts: { heading: 'Inter', body: 'Inter' },
+    layout: { radius: '8px', cover_style: 'minimal' }
   }
 };
 
@@ -1048,7 +1088,18 @@ const BlockRenderer = ({
   const renderContent = () => {
     switch(type) {
       case 'h2': 
-        return <Editable tag="h3" className="tx-heading text-2xl font-bold mt-6 mb-3 break-after-avoid border-b pb-2 border-[var(--tx-border)]" onUpdate={onUpdateText} blockIndex={blockIndex} pageIndex={pageIndex} style={block.style}>{text}</Editable>;
+        return (
+          <Editable
+            tag="h3"
+            className={`tx-heading text-[26px] font-extrabold tracking-tight ${blockIndex === 0 ? 'mt-10' : 'mt-7'} mb-4 break-after-avoid border-b pb-2 border-[var(--tx-border)]`}
+            onUpdate={onUpdateText}
+            blockIndex={blockIndex}
+            pageIndex={pageIndex}
+            style={block.style}
+          >
+            {text}
+          </Editable>
+        );
       case 'p': 
         return <Editable tag="p" className="tx-body mb-4 text-justify opacity-90" onUpdate={onUpdateText} blockIndex={blockIndex} pageIndex={pageIndex} style={block.style}>{text}</Editable>;
     
@@ -1224,13 +1275,10 @@ export default function GoodPDF() {
   const [step, setStep] = useState('SETUP');
   const [config, setConfig] = useState({ topic: '', type: 'report', pages: 4, template: 'modern' });
   const [architecture, setArchitecture] = useState<any>(null);
-  // const [fullContent, setFullContent] = useState<any[]>([]);
   const [progress, setProgress] = useState('');
-  const [layoutMetrics, setLayoutMetrics] = useState({ scale: 1, metrics: { utilization: '' as string | undefined, totalWeight: 0, capacity: 0, blockCount: 0 } });
-  const [pageData, setPageData] = useState<any[][]>([]);
   const [isExporting, setIsExporting] = useState(false);
-  
-  // Editing state management
+  const [pageData, setPageData] = useState<any[]>([]);
+  const [layoutMetrics, setLayoutMetrics] = useState({ scale: 1, metrics: {} as any });
   const [confirmationDialog, setConfirmationDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -1267,7 +1315,7 @@ export default function GoodPDF() {
       message: 'Are you sure you want to delete this section? This action cannot be undone.',
       onConfirm: () => {
         const newPageData = [...pageData];
-        newPageData[pageIndex] = newPageData[pageIndex].filter((_, index) => index !== blockIndex);
+        newPageData[pageIndex] = newPageData[pageIndex].filter((_item: any, index: number) => index !== blockIndex);
         setPageData(newPageData);
         setConfirmationDialog({ ...confirmationDialog, isOpen: false });
       },
@@ -1632,16 +1680,21 @@ export default function GoodPDF() {
   };
 
   const activeTemplate = PRO_TEMPLATES[config.template as keyof typeof PRO_TEMPLATES];
+  const setupTemplates = Object.values(PRO_TEMPLATES);
+  const setupTemplateTiles = setupTemplates;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans flex flex-col">
       <DesignInjector template={activeTemplate} scale={layoutMetrics.scale} />
       
       {/* HEADER */}
-      <header className="bg-white h-16 border-b flex items-center justify-between px-6 sticky top-0 z-50 shadow-sm">
+      <header className={step === 'SETUP'
+        ? "h-14 flex items-center justify-between px-4 sm:px-6 pt-3 z-50 bg-transparent"
+        : "bg-white h-16 border-b flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50 shadow-sm"
+      }>
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => setStep('SETUP')}>
           <div>
-            <span className="block font-bold leading-none text-base" style={{ fontFamily: 'Inter, sans-serif', fontWeight: '700', letterSpacing: '-0.02em' }}>
+            <span className="block font-bold leading-none text-[18px] sm:text-[20px]" style={{ fontFamily: 'Inter, sans-serif', fontWeight: '900', letterSpacing: '-0.03em' }}>
               <span style={{ color: '#FF3B30' }}>Good</span><span style={{ color: '#1D1D1F' }}>PDF</span>
             </span>
           </div>
@@ -1681,75 +1734,156 @@ export default function GoodPDF() {
       </header>
 
       {/* MAIN */}
-      <div className="flex-1 overflow-y-auto bg-gray-100 p-8 flex flex-col items-center">
+      <div
+        className={step === 'SETUP'
+          ? "flex-1 overflow-y-auto flex flex-col items-center"
+          : "flex-1 overflow-y-auto bg-gray-100 p-8 flex flex-col items-center"
+        }
+        style={step === 'SETUP' ? {
+          background:
+            "radial-gradient(1200px 520px at 48% 35%, rgba(171, 196, 255, 0.55) 0%, rgba(255,255,255,0) 60%)," +
+            "radial-gradient(900px 520px at 82% 55%, rgba(214, 187, 255, 0.45) 0%, rgba(255,255,255,0) 62%)," +
+            "radial-gradient(900px 520px at 16% 70%, rgba(198, 255, 241, 0.40) 0%, rgba(255,255,255,0) 62%)," +
+            "linear-gradient(180deg, #eef5ff 0%, #f7f4ff 55%, #eefcff 100%)"
+        } : undefined}
+      >
         
         {step === 'SETUP' && (
-          <div>
-            <div className="text-center mb-8">
-               <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif' }}>Create <span style={{ color: '#FF3B30' }}>Good</span> PDF's</h1>
+          <div className="w-full flex flex-col items-center px-4 sm:px-6 pb-10">
+            <div className="text-center mt-6 sm:mt-10 mb-4 px-1">
+              <h1
+                className="text-[28px] sm:text-[34px] font-black tracking-tight"
+                style={{ fontFamily: '-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Helvetica Neue\", Helvetica, Arial, sans-serif' }}
+              >
+                Create <span style={{ color: '#FF3B30' }}>Good</span> PDF's
+              </h1>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-               <div className="space-y-6">
-                  <div className="relative">
-                    <label className="block text-xs font-bold uppercase text-gray-400 mb-2">Topic</label>
-                    <textarea 
-                      value={config.topic} 
-                      onChange={e => setConfig({...config, topic: e.target.value})} 
-                      className="w-full p-4 text-lg border border-gray-200 rounded-xl focus:ring-2 focus:ring-black outline-none h-32 resize-none pr-32" 
-                      placeholder="e.g. Sustainable Energy in 2030..."
-                    />
-                    <button 
-                      onClick={handleStart} 
-                      disabled={!config.topic}
-                      className="absolute bottom-2 right-2 bg-black hover:bg-gray-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all shadow disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Wand2 size={12}/> Generate
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold uppercase text-gray-400 mb-2">Type</label>
-                      <select className="w-full p-3 border rounded-xl bg-white" value={config.type} onChange={e => setConfig({...config, type: e.target.value})}>
-                        {['report', 'proposal', 'white_paper', 'thesis'].map(t => <option key={t} value={t}>{t.toUpperCase().replace('_',' ')}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold uppercase text-gray-400 mb-2">Length</label>
-                      <select className="w-full p-3 border rounded-xl bg-white" value={config.pages} onChange={e => setConfig({...config, pages: parseInt(e.target.value)})}>
-                        {[4, 6, 8, 10, 15, 20].map(n => <option key={n} value={n}>{n} Pages</option>)}
-                      </select>
-                    </div>
-                  </div>
-               </div>
 
-               <div className="space-y-6">
-                  <label className="block text-xs font-bold uppercase text-gray-400">Select Template</label>
-                  <div className="grid grid-cols-1 gap-3">
-                     {Object.values(PRO_TEMPLATES).map(t => (
-                        <button 
-                          key={t.id}
-                          onClick={() => setConfig({...config, template: t.id})}
-                          className={`p-4 rounded-xl border text-left flex items-start gap-4 transition-all ${config.template === t.id ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200 hover:border-gray-300'}`}
+            <div className="w-full flex flex-col items-center">
+              <div className="w-full max-w-[760px] mb-5">
+                <div className="text-left">
+                  <label className="block text-[11px] font-extrabold uppercase text-slate-800 tracking-[0.18em] mb-2">Topic</label>
+                </div>
+                <div
+                  className="relative rounded-[16px] bg-white border border-slate-200"
+                  style={{
+                    boxShadow:
+                      '0 22px 44px rgba(90, 120, 255, 0.20), 0 12px 24px rgba(160, 120, 255, 0.16), 0 2px 0 rgba(255,255,255,0.75) inset'
+                  }}
+                >
+                  <textarea
+                    value={config.topic}
+                    onChange={e => setConfig({ ...config, topic: e.target.value })}
+                    className="w-full pt-5 sm:pt-6 px-4 sm:px-6 pb-[140px] sm:pb-[76px] text-[15px] sm:text-[16px] leading-6 outline-none resize-none rounded-[16px] bg-transparent"
+                    placeholder=""
+                    style={{ minHeight: 150 }}
+                  />
+
+                  <div className="absolute left-4 sm:left-6 bottom-4 sm:bottom-5 flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-5">
+                    <div>
+                      <label className="block text-[9px] font-extrabold uppercase text-slate-400 tracking-[0.14em] mb-1">Type</label>
+                      <select
+                        className="h-8 px-3 pr-8 text-[11px] font-semibold border border-slate-200 rounded-[10px] bg-white shadow-sm focus:outline-none"
+                        value={config.type}
+                        onChange={e => setConfig({ ...config, type: e.target.value })}
+                      >
+                        {['report', 'proposal', 'white_paper', 'research', 'assignment', 'notes'].map(t => (
+                          <option key={t} value={t}>{t.toUpperCase().replace('_', ' ')}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-extrabold uppercase text-slate-400 tracking-[0.14em] mb-1">Length</label>
+                      <select
+                        className="h-8 px-3 pr-8 text-[11px] font-semibold border border-slate-200 rounded-[10px] bg-white shadow-sm focus:outline-none"
+                        value={config.pages}
+                        onChange={e => setConfig({ ...config, pages: parseInt(e.target.value) })}
+                      >
+                        {[4, 6, 8, 10, 15, 20].map(n => (
+                          <option key={n} value={n}>{n} Pages</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleStart}
+                    disabled={!config.topic}
+                    className="absolute right-4 sm:right-5 bottom-4 sm:bottom-5 h-9 sm:h-8 px-4 rounded-[12px] text-[12px] sm:text-[11px] font-bold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      background: 'linear-gradient(180deg, #7c7f86 0%, #5f636b 100%)',
+                      color: '#ffffff',
+                      boxShadow: '0 10px 18px rgba(0,0,0,0.18)'
+                    }}
+                  >
+                    <Wand2 size={12} /> Generate
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative w-full max-w-[1120px]">
+                <label className="block text-[10px] font-extrabold uppercase text-slate-700 tracking-[0.18em] mb-4">Select Template</label>
+                <div className="relative">
+                  <div className="max-h-[520px] overflow-y-auto pr-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                      {setupTemplateTiles.map((t, idx) => {
+                      const isSelected = config.template === t.id;
+                      const glow = t.id === 'academic'
+                        ? '0 18px 28px rgba(59, 130, 246, 0.20)'
+                        : t.id === 'modern'
+                          ? '0 18px 28px rgba(34, 211, 238, 0.20)'
+                          : t.id === 'creative'
+                            ? '0 18px 28px rgba(249, 115, 22, 0.18)'
+                            : '0 18px 28px rgba(239, 68, 68, 0.14)';
+
+                      const border = isSelected ? '#0f172a' : 'rgba(148, 163, 184, 0.45)';
+                      const bg = 'rgba(255,255,255,0.88)';
+
+                      return (
+                        <button
+                          key={`${t.id}-${idx}`}
+                          onClick={() => setConfig({ ...config, template: t.id })}
+                          className="relative w-full text-left rounded-[14px] px-3 sm:px-4 py-3 sm:py-4 border transition-all"
+                          style={{
+                            borderColor: border,
+                            background: bg,
+                            backdropFilter: 'blur(10px)',
+                            boxShadow: glow
+                          }}
                         >
-                           <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0`} style={{backgroundColor: t.colors.secondary, color: t.colors.accent}}>
-                              {t.id === 'academic' && <GradIcon size={20}/>}
-                              {t.id === 'modern' && <Monitor size={20}/>}
-                              {t.id === 'creative' && <Wand2 size={20}/>}
-                              {t.id === 'minimalist' && <LayoutTemplate size={20}/>}
-                           </div>
-                           <div>
-                              <span className="font-bold block text-sm">{t.name}</span>
-                              <span className="text-xs text-gray-500">{t.description}</span>
-                           </div>
-                           {config.template === t.id && <CheckCircle size={18} className="ml-auto text-black"/>}
+                          <div className="flex items-start gap-3">
+                            <div
+                              className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: '#ffffff', border: '1px solid rgba(226, 232, 240, 0.9)', color: t.colors.accent }}
+                            >
+                              {t.id === 'university' && <Book size={16} />}
+                              {t.id === 'academic' && <GradIcon size={16} />}
+                              {t.id === 'modern' && <Monitor size={16} />}
+                              {t.id === 'creative' && <Wand2 size={16} />}
+                              {t.id === 'corporate' && <FileText size={16} />}
+                              {t.id === 'pastel' && <Lightbulb size={16} />}
+                              {t.id === 'emerald' && <Zap size={16} />}
+                              {t.id === 'editorial' && <TypeIcon size={16} />}
+                              {t.id === 'slate' && <AlignLeft size={16} />}
+                              {t.id === 'minimalist' && <AlignCenter size={16} />}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-[11px] sm:text-[12px] font-extrabold leading-4 text-slate-900 truncate">{t.name}</div>
+                              <div className="hidden sm:block text-[10px] text-slate-500 leading-4 mt-1">{t.description}</div>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <CheckCircle size={16} className="absolute right-3 top-3" style={{ color: '#0f172a' }} />
+                          )}
                         </button>
-                     ))}
+                      );
+                      })}
+                    </div>
                   </div>
-               </div>
+                </div>
+              </div>
             </div>
-
-                      </div>
+          </div>
         )}
 
         {(step === 'ARCHITECTING' || step === 'WRITING') && (
@@ -1821,7 +1955,7 @@ export default function GoodPDF() {
                 }}
                 onUpdateText={handleUpdateText}
               >
-                {chunk.map((block, j) => (
+                {chunk.map((block: any, j: number) => (
                   <BlockRenderer 
                     key={j} 
                     block={block}
