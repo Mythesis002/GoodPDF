@@ -17,7 +17,8 @@ import {
   Type as TypeIcon, Book, GraduationCap as GradIcon,
   Lightbulb,
   Activity, CheckCircle, Scale,
-  AlignLeft, AlignCenter, AlignRight
+  AlignLeft, AlignCenter, AlignRight,
+  RotateCcw, Undo2, Redo2
 } from 'lucide-react';
 
 /**
@@ -88,6 +89,11 @@ const generateImage = async (prompt: string) => {
   console.log("🎨 Image API called with prompt:", prompt.substring(0, 50));
   
   try {
+    if (!apiKey) {
+      console.warn("⚠️ Missing API key for image generation, using fallback");
+      return createFallbackSVG(prompt);
+    }
+
     const requestBody = {
       instances: [{ 
         prompt: prompt + ", professional illustration, high quality, clean design, minimalist style, infographic style, white background, vector art" 
@@ -95,7 +101,7 @@ const generateImage = async (prompt: string) => {
       parameters: { 
         sampleCount: 1,
         aspectRatio: "16:9",
-        safetySetting: "block_some",
+        safetySetting: "block_low_and_above",
         personGeneration: "allow_adult"
       }
     };
@@ -103,10 +109,10 @@ const generateImage = async (prompt: string) => {
     console.log("📤 Sending request to Imagen API...");
     
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
         body: JSON.stringify(requestBody)
       }
     );
@@ -387,7 +393,47 @@ OUTPUT (JSON only):
   return callAI(prompt);
 };
 
-const generateSectionContent = async (section: any, topic: string, wordBudget: number) => {
+const chooseVisualSectionIndexes = (sections: any[], contentPages: number, density: 'minimal' | 'balanced' | 'rich') => {
+  const n = sections?.length || 0;
+  const result = new Set<number>();
+  if (n === 0) return result;
+
+  const base = density === 'minimal' ? 2 : density === 'rich' ? 5 : 3;
+  const maxImages = Math.max(0, Math.min(base, Math.max(1, contentPages))); 
+
+  const importantKeywords = [
+    'introduction', 'overview', 'method', 'methodology', 'approach',
+    'results', 'findings', 'analysis', 'discussion', 'conclusion',
+    'architecture', 'framework', 'system', 'design'
+  ];
+
+  const scored = sections.map((s, i) => {
+    const title = safeStr(s?.title).toLowerCase();
+    let score = 0;
+    for (const k of importantKeywords) if (title.includes(k)) score += 2;
+    if (i === 0) score += 3;
+    if (i === n - 1) score += 3;
+    return { i, score };
+  }).sort((a, b) => b.score - a.score);
+
+  for (const x of scored) {
+    if (result.size >= maxImages) break;
+    result.add(x.i);
+  }
+
+  if (result.size < maxImages) {
+    const mid = Math.floor(n / 2);
+    if (!result.has(mid)) result.add(mid);
+  }
+
+  while (result.size > maxImages) {
+    result.delete(Array.from(result.values()).slice(-1)[0]);
+  }
+
+  return result;
+};
+
+const generateSectionContent = async (section: any, topic: string, wordBudget: number, visualsMode: 'none' | 'image') => {
   const prompt = `
 Write content for section "${section.title}" in document about "${topic}".
 
@@ -400,6 +446,11 @@ ABSOLUTE CONSTRAINTS (MUST FOLLOW):
    - OPTIONAL: 1 additional element (key_term OR image_prompt, not both)
 
 4. NO EXCESS CONTENT: If nearing word limit, STOP immediately
+
+VISUAL RULES:
+${visualsMode === 'image'
+  ? '- You MUST include exactly 1 image_prompt block (diagram/figure) with a clear, professional desc\n- Do NOT include key_term in this section'
+  : '- Do NOT include any image_prompt blocks in this section\n- If you include an additional element, it MUST be key_term'}
 
 BLOCK TYPES ALLOWED:
 - h2: Section heading
@@ -601,6 +652,7 @@ const HoverControlPanel = ({
   onMoveDown, 
   onDelete, 
   onAIRewrite,
+  onRegenerate,
   onFormatText,
   isVisible 
 }: {
@@ -611,6 +663,7 @@ const HoverControlPanel = ({
   onMoveDown: () => void;
   onDelete: () => void;
   onAIRewrite: () => void;
+  onRegenerate: () => void;
   onFormatText: (format: string) => void;
   isVisible: boolean;
 }) => {
@@ -768,6 +821,15 @@ const HoverControlPanel = ({
           ) : (
             <Zap className="w-3.5 h-3.5 text-gray-600" />
           )}
+        </button>
+
+        {/* Regenerate */}
+        <button
+          onClick={onRegenerate}
+          className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+          title="Regenerate"
+        >
+          <RotateCcw className="w-3.5 h-3.5 text-gray-600" />
         </button>
 
         {/* Delete */}
@@ -990,15 +1052,17 @@ const Editable = ({
   );
 };
 
-const AIImage = ({ desc }: { desc: string }) => {
+const AIImage = ({ desc, regenNonce }: { desc: string; regenNonce?: number }) => {
   const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
+    setSrc(null);
+    setLoading(false);
     const timer = setTimeout(() => trigger(), Math.random() * 500); 
     return () => clearTimeout(timer);
-  }, []);
+  }, [desc, regenNonce]);
   
   const trigger = async () => {
     if (loading || src) return;
@@ -1068,6 +1132,7 @@ const BlockRenderer = ({
   onMoveDown, 
   onDelete, 
   onAIRewrite,
+  onRegenerate,
   onFormatText,
   onUpdateText 
 }: { 
@@ -1078,6 +1143,7 @@ const BlockRenderer = ({
   onMoveDown: () => void; 
   onDelete: () => void; 
   onAIRewrite: () => void; 
+  onRegenerate: () => void;
   onFormatText: (format: string) => void; 
   onUpdateText: (pageIndex: number, blockIndex: number, newText: string) => void;
 }) => {
@@ -1136,7 +1202,7 @@ const BlockRenderer = ({
       );
 
     case 'image_prompt': 
-      return <AIImage desc={desc || text} />;
+      return <AIImage desc={desc || text} regenNonce={block.regenNonce} />;
       
     default: return null;
   }
@@ -1157,6 +1223,7 @@ const BlockRenderer = ({
         onMoveDown={onMoveDown}
         onDelete={onDelete}
         onAIRewrite={onAIRewrite}
+        onRegenerate={onRegenerate}
         onFormatText={onFormatText}
         isVisible={isHovered}
       />
@@ -1166,6 +1233,7 @@ const BlockRenderer = ({
 
 const Page = ({ 
   children, 
+  pageIndex,
   num, 
   template, 
   meta, 
@@ -1176,6 +1244,7 @@ const Page = ({
   onUpdateText 
 }: { 
   children: any; 
+  pageIndex: number;
   num: number; 
   template: any; 
   meta: any; 
@@ -1186,6 +1255,7 @@ const Page = ({
     onMoveBlock: (pageIndex: number, blockIndex: number, direction: 'up' | 'down') => void;
     onDeleteBlock: (pageIndex: number, blockIndex: number) => void;
     onAIRewriteBlock: (pageIndex: number, blockIndex: number) => void;
+    onRegenerateBlock: (pageIndex: number, blockIndex: number) => void;
     onFormatBlock: (pageIndex: number, blockIndex: number, format: string) => void;
   };
   onUpdateText: (pageIndex: number, blockIndex: number, newText: string) => void;
@@ -1222,14 +1292,15 @@ const Page = ({
 
       <div className="flex-1 px-12 py-8 overflow-hidden relative flex flex-col justify-start">
         {React.Children.map(children, (child, index) => 
-          React.isValidElement(child) ? 
+          React.isValidElement(child) && typeof child.type !== 'string' ? 
             React.cloneElement(child as React.ReactElement<any>, {
-              pageIndex: num,
-              onMoveUp: () => blockOperations.onMoveBlock(num, index, 'up'),
-              onMoveDown: () => blockOperations.onMoveBlock(num, index, 'down'),
-              onDelete: () => blockOperations.onDeleteBlock(num, index),
-              onAIRewrite: () => blockOperations.onAIRewriteBlock(num, index),
-              onFormatText: (format: string) => blockOperations.onFormatBlock(num, index, format),
+              pageIndex,
+              onMoveUp: () => blockOperations.onMoveBlock(pageIndex, index, 'up'),
+              onMoveDown: () => blockOperations.onMoveBlock(pageIndex, index, 'down'),
+              onDelete: () => blockOperations.onDeleteBlock(pageIndex, index),
+              onAIRewrite: () => blockOperations.onAIRewriteBlock(pageIndex, index),
+              onRegenerate: () => blockOperations.onRegenerateBlock(pageIndex, index),
+              onFormatText: (format: string) => blockOperations.onFormatBlock(pageIndex, index, format),
               onUpdateText: onUpdateText
             }) : 
             child
@@ -1273,11 +1344,13 @@ const CoverPage = ({ meta }: { template: any, meta: any }) => (
 
 export default function GoodPDF() {
   const [step, setStep] = useState('SETUP');
-  const [config, setConfig] = useState({ topic: '', type: 'report', pages: 4, template: 'modern' });
+  const [config, setConfig] = useState({ topic: '', type: 'report', pages: 4, template: 'modern', visuals: true, visualsDensity: 'balanced' as 'minimal' | 'balanced' | 'rich' });
   const [architecture, setArchitecture] = useState<any>(null);
   const [progress, setProgress] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [pageData, setPageData] = useState<any[]>([]);
+  const [undoStack, setUndoStack] = useState<any[]>([]);
+  const [redoStack, setRedoStack] = useState<any[]>([]);
   const [layoutMetrics, setLayoutMetrics] = useState({ scale: 1, metrics: {} as any });
   const [confirmationDialog, setConfirmationDialog] = useState<{
     isOpen: boolean;
@@ -1292,20 +1365,76 @@ export default function GoodPDF() {
     onConfirm: () => {},
     onCancel: () => {}
   });
+
+  const cloneData = (d: any) => {
+    try {
+      if (typeof structuredClone === 'function') return structuredClone(d);
+      return JSON.parse(JSON.stringify(d));
+    } catch (_e) {
+      return JSON.parse(JSON.stringify(d));
+    }
+  };
+
+  const commitPageData = (updater: (current: any[]) => any[]) => {
+    setPageData((prev) => {
+      setUndoStack((s) => [...s, cloneData(prev)].slice(-50));
+      setRedoStack([]);
+      return updater(cloneData(prev));
+    });
+  };
+
+  const handleUndo = () => {
+    setUndoStack((prevUndo) => {
+      if (prevUndo.length === 0) return prevUndo;
+      const previous = prevUndo[prevUndo.length - 1];
+      setRedoStack((r) => [...r, cloneData(pageData)].slice(-50));
+      setPageData(cloneData(previous));
+      return prevUndo.slice(0, -1);
+    });
+  };
+
+  const handleRedo = () => {
+    setRedoStack((prevRedo) => {
+      if (prevRedo.length === 0) return prevRedo;
+      const next = prevRedo[prevRedo.length - 1];
+      setUndoStack((u) => [...u, cloneData(pageData)].slice(-50));
+      setPageData(cloneData(next));
+      return prevRedo.slice(0, -1);
+    });
+  };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      } else if (key === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [pageData]);
   
   // Block operations
   const handleMoveBlock = (pageIndex: number, blockIndex: number, direction: 'up' | 'down') => {
-    const newPageData = [...pageData];
-    const currentPage = [...newPageData[pageIndex]];
-    
-    const targetIndex = direction === 'up' ? blockIndex - 1 : blockIndex + 1;
-    
-    if (targetIndex >= 0 && targetIndex < currentPage.length) {
-      // Swap blocks
+    commitPageData((current) => {
+      const newPageData = [...current];
+      const page = newPageData[pageIndex];
+      if (!page) return newPageData;
+      const currentPage = [...page];
+
+      const targetIndex = direction === 'up' ? blockIndex - 1 : blockIndex + 1;
+      if (targetIndex < 0 || targetIndex >= currentPage.length) return newPageData;
+
       [currentPage[blockIndex], currentPage[targetIndex]] = [currentPage[targetIndex], currentPage[blockIndex]];
       newPageData[pageIndex] = currentPage;
-      setPageData(newPageData);
-    }
+      return newPageData;
+    });
   };
   
   const handleDeleteBlock = (pageIndex: number, blockIndex: number) => {
@@ -1314,12 +1443,16 @@ export default function GoodPDF() {
       title: 'Delete Section',
       message: 'Are you sure you want to delete this section? This action cannot be undone.',
       onConfirm: () => {
-        const newPageData = [...pageData];
-        newPageData[pageIndex] = newPageData[pageIndex].filter((_item: any, index: number) => index !== blockIndex);
-        setPageData(newPageData);
-        setConfirmationDialog({ ...confirmationDialog, isOpen: false });
+        commitPageData((current) => {
+          const newPageData = [...current];
+          const page = newPageData[pageIndex];
+          if (!page) return newPageData;
+          newPageData[pageIndex] = page.filter((_item: any, index: number) => index !== blockIndex);
+          return newPageData;
+        });
+        setConfirmationDialog((d) => ({ ...d, isOpen: false }));
       },
-      onCancel: () => setConfirmationDialog({ ...confirmationDialog, isOpen: false })
+      onCancel: () => setConfirmationDialog((d) => ({ ...d, isOpen: false }))
     });
   };
   
@@ -1331,52 +1464,121 @@ export default function GoodPDF() {
     const rewrittenText = await rewriteSectionWithAI(block, context);
     
     if (rewrittenText) {
-      const newPageData = [...pageData];
-      const updatedBlock = { ...block };
-      
-      if (block.type === 'p' || block.type === 'h2') {
-        updatedBlock.text = rewrittenText;
-      } else if (block.type === 'key_term') {
-        updatedBlock.definition = rewrittenText;
-      }
-      
-      newPageData[pageIndex][blockIndex] = updatedBlock;
-      setPageData(newPageData);
+      commitPageData((current) => {
+        const newPageData = [...current];
+        const page = newPageData[pageIndex];
+        if (!page) return newPageData;
+        const updatedBlock = { ...page[blockIndex] };
+
+        if (updatedBlock.type === 'p' || updatedBlock.type === 'h2' || updatedBlock.type === 'takeaway') {
+          updatedBlock.text = rewrittenText;
+        } else if (updatedBlock.type === 'key_term') {
+          updatedBlock.definition = rewrittenText;
+        }
+
+        newPageData[pageIndex] = [...page];
+        newPageData[pageIndex][blockIndex] = updatedBlock;
+        return newPageData;
+      });
     }
+  };
+
+  const handleRegenerateBlock = async (pageIndex: number, blockIndex: number) => {
+    const block = pageData?.[pageIndex]?.[blockIndex];
+    if (!block) return;
+
+    if (block.type === 'image_prompt') {
+      commitPageData((current) => {
+        const newPageData = [...current];
+        const page = newPageData[pageIndex];
+        if (!page) return newPageData;
+        const updatedBlock = { ...page[blockIndex], regenNonce: Date.now() };
+        newPageData[pageIndex] = [...page];
+        newPageData[pageIndex][blockIndex] = updatedBlock;
+        return newPageData;
+      });
+      return;
+    }
+
+    const context = `Document topic: ${config.topic}. Block type: ${block.type}.`;
+    const prompt = `
+Generate a fresh alternative for the following document block.
+
+CONSTRAINTS:
+- Output JSON only
+- Keep the same block type
+- Keep it professional and consistent with the document topic
+- Keep similar length (±30%)
+
+CONTEXT:
+${context}
+
+CURRENT BLOCK:
+${JSON.stringify(block)}
+
+OUTPUT:
+{ "text": "..." } OR { "term": "...", "definition": "..." }
+`;
+
+    const result = await callAI(prompt);
+    if (!result) return;
+
+    commitPageData((current) => {
+      const newPageData = [...current];
+      const page = newPageData[pageIndex];
+      if (!page) return newPageData;
+      const updatedBlock = { ...page[blockIndex] };
+
+      if (updatedBlock.type === 'key_term') {
+        if (result.term) updatedBlock.term = result.term;
+        if (result.definition) updatedBlock.definition = result.definition;
+      } else {
+        if (result.text) updatedBlock.text = result.text;
+      }
+
+      newPageData[pageIndex] = [...page];
+      newPageData[pageIndex][blockIndex] = updatedBlock;
+      return newPageData;
+    });
   };
   
   const handleFormatBlock = (pageIndex: number, blockIndex: number, format: string) => {
-    const newPageData = [...pageData];
-    const block = { ...newPageData[pageIndex][blockIndex] };
-    
-    const [property, value] = format.split(':');
-    
-    switch (property) {
-      case 'fontSize':
-        block.style = { ...block.style, fontSize: value };
-        break;
-      case 'fontFamily':
-        block.style = { ...block.style, fontFamily: value };
-        break;
-      case 'textAlign':
-        block.style = { ...block.style, textAlign: value };
-        break;
-      case 'fontWeight':
-        block.style = { ...block.style, fontWeight: value };
-        break;
-      case 'fontStyle':
-        block.style = { ...block.style, fontStyle: value };
-        break;
-      case 'textDecoration':
-        block.style = { ...block.style, textDecoration: value };
-        break;
-      case 'color':
-        block.style = { ...block.style, color: value };
-        break;
-    }
-    
-    newPageData[pageIndex][blockIndex] = block;
-    setPageData(newPageData);
+    commitPageData((current) => {
+      const newPageData = [...current];
+      const page = newPageData[pageIndex];
+      if (!page) return newPageData;
+      const block = { ...page[blockIndex] };
+
+      const [property, value] = format.split(':');
+
+      switch (property) {
+        case 'fontSize':
+          block.style = { ...block.style, fontSize: value };
+          break;
+        case 'fontFamily':
+          block.style = { ...block.style, fontFamily: value };
+          break;
+        case 'textAlign':
+          block.style = { ...block.style, textAlign: value };
+          break;
+        case 'fontWeight':
+          block.style = { ...block.style, fontWeight: value };
+          break;
+        case 'fontStyle':
+          block.style = { ...block.style, fontStyle: value };
+          break;
+        case 'textDecoration':
+          block.style = { ...block.style, textDecoration: value };
+          break;
+        case 'color':
+          block.style = { ...block.style, color: value };
+          break;
+      }
+
+      newPageData[pageIndex] = [...page];
+      newPageData[pageIndex][blockIndex] = block;
+      return newPageData;
+    });
   };
   
   // Page operations
@@ -1386,37 +1588,43 @@ export default function GoodPDF() {
       title: 'Delete Page',
       message: 'Are you sure you want to delete this page? All content on this page will be permanently removed.',
       onConfirm: () => {
-        const newPageData = pageData.filter((_, index) => index !== pageIndex);
-        setPageData(newPageData);
-        setConfirmationDialog({ ...confirmationDialog, isOpen: false });
+        commitPageData((current) => current.filter((_, index) => index !== pageIndex));
+        setConfirmationDialog((d) => ({ ...d, isOpen: false }));
       },
-      onCancel: () => setConfirmationDialog({ ...confirmationDialog, isOpen: false })
+      onCancel: () => setConfirmationDialog((d) => ({ ...d, isOpen: false }))
     });
   };
   
   const handleAddPage = (position: 'before' | 'after', pageIndex: number) => {
-    const newPageData = [...pageData];
-    const emptyPage = [{ type: 'p', text: 'New page content...' }];
-    
-    if (position === 'before') {
-      newPageData.splice(pageIndex, 0, emptyPage);
-    } else {
-      newPageData.splice(pageIndex + 1, 0, emptyPage);
-    }
-    
-    setPageData(newPageData);
+    commitPageData((current) => {
+      const newPageData = [...current];
+      const emptyPage = [{ type: 'p', text: 'New page content...' }];
+
+      if (position === 'before') {
+        newPageData.splice(pageIndex, 0, emptyPage);
+      } else {
+        newPageData.splice(pageIndex + 1, 0, emptyPage);
+      }
+
+      return newPageData;
+    });
   };
 
   const handleUpdateText = (pageIndex: number, blockIndex: number, newText: string) => {
-    const newPageData = [...pageData];
-    const block = { ...newPageData[pageIndex][blockIndex] };
-    
-    if (block.type === 'p' || block.type === 'h2' || block.type === 'takeaway') {
-      block.text = newText;
-    }
-    
-    newPageData[pageIndex][blockIndex] = block;
-    setPageData(newPageData);
+    commitPageData((current) => {
+      const newPageData = [...current];
+      const page = newPageData[pageIndex];
+      if (!page) return newPageData;
+      const block = { ...page[blockIndex] };
+
+      if (block.type === 'p' || block.type === 'h2' || block.type === 'takeaway') {
+        block.text = newText;
+      }
+
+      newPageData[pageIndex] = [...page];
+      newPageData[pageIndex][blockIndex] = block;
+      return newPageData;
+    });
   };
   
   useEffect(() => {
@@ -1471,6 +1679,10 @@ export default function GoodPDF() {
         const wordBudget = architecture.budget.wordsPerSection;
         let allBlocks = [];
 
+        const visualIndexes = config.visuals
+          ? chooseVisualSectionIndexes(sections, architecture.budget.contentPages, config.visualsDensity)
+          : new Set<number>();
+
         // Abstract
         if (architecture.meta?.abstract) {
           allBlocks.push({ type: 'h2', text: 'Abstract' });
@@ -1483,7 +1695,8 @@ export default function GoodPDF() {
           setProgress(`Writing section ${i+1}/${sections.length} (${pct}%)...`);
           
           console.log(`Generating content for section: ${sections[i].title}`);
-          const res = await generateSectionContent(sections[i], config.topic, wordBudget);
+          const visualsMode = visualIndexes.has(i) ? 'image' : 'none';
+          const res = await generateSectionContent(sections[i], config.topic, wordBudget, visualsMode);
           
           if (res && res.blocks) {
             console.log(`Section ${i+1} generated ${res.blocks.length} blocks`);
@@ -1701,6 +1914,24 @@ export default function GoodPDF() {
         </div>
         {step === 'FINISHED' && (
           <div className="flex items-center gap-6">
+             <div className="flex items-center gap-1">
+               <button
+                 onClick={handleUndo}
+                 disabled={undoStack.length === 0}
+                 className="p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                 title="Undo (Ctrl/Cmd+Z)"
+               >
+                 <Undo2 size={16} />
+               </button>
+               <button
+                 onClick={handleRedo}
+                 disabled={redoStack.length === 0}
+                 className="p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                 title="Redo (Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z)"
+               >
+                 <Redo2 size={16} />
+               </button>
+             </div>
              <div className="hidden md:flex gap-4 text-xs font-medium text-gray-500 bg-gray-100 px-4 py-2 rounded-full">
                 <span className="flex items-center gap-1">
                   <FileText size={12}/> {pageData.length + (architecture?.budget?.tocPages || 0) + 1}/{config.pages} pages
@@ -1803,6 +2034,30 @@ export default function GoodPDF() {
                           <option key={n} value={n}>{n} Pages</option>
                         ))}
                       </select>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-extrabold uppercase text-slate-400 tracking-[0.14em] mb-1">Visuals</label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfig({ ...config, visuals: !config.visuals })}
+                          className={`h-8 px-3 text-[11px] font-semibold border rounded-[10px] shadow-sm focus:outline-none transition-colors ${config.visuals ? 'bg-white border-slate-200' : 'bg-slate-100 border-slate-200 text-slate-500'}`}
+                          title="Include professional visuals"
+                        >
+                          {config.visuals ? 'On' : 'Off'}
+                        </button>
+                        <select
+                          className="h-8 px-3 pr-8 text-[11px] font-semibold border border-slate-200 rounded-[10px] bg-white shadow-sm focus:outline-none disabled:opacity-50"
+                          value={config.visualsDensity}
+                          onChange={e => setConfig({ ...config, visualsDensity: e.target.value as any })}
+                          disabled={!config.visuals}
+                          title="Visual density"
+                        >
+                          <option value="minimal">Minimal</option>
+                          <option value="balanced">Balanced</option>
+                          <option value="rich">Rich</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
@@ -1911,16 +2166,18 @@ export default function GoodPDF() {
             {/* TABLE OF CONTENTS */}
             {architecture.budget?.hasTOC && (
               <Page
+                pageIndex={-1}
                 num={1}
                 template={activeTemplate}
                 meta={architecture.meta}
                 totalPages={pageData.length + (architecture.budget?.tocPages || 0) + 1}
-                onDeletePage={() => handleDeletePage(0)}
-                onAddPage={(position) => handleAddPage(position, 0)}
+                onDeletePage={() => {}}
+                onAddPage={(position) => { void position; }}
                 blockOperations={{
                   onMoveBlock: handleMoveBlock,
                   onDeleteBlock: handleDeleteBlock,
                   onAIRewriteBlock: handleAIRewriteBlock,
+                  onRegenerateBlock: handleRegenerateBlock,
                   onFormatBlock: handleFormatBlock
                 }}
                 onUpdateText={handleUpdateText}
@@ -1941,6 +2198,7 @@ export default function GoodPDF() {
             {pageData.map((chunk, i) => (
               <Page 
                 key={i} 
+                pageIndex={i}
                 num={i + (architecture.budget?.hasTOC ? 2 : 2)} 
                 template={activeTemplate} 
                 meta={architecture.meta}
@@ -1951,6 +2209,7 @@ export default function GoodPDF() {
                   onMoveBlock: handleMoveBlock,
                   onDeleteBlock: handleDeleteBlock,
                   onAIRewriteBlock: handleAIRewriteBlock,
+                  onRegenerateBlock: handleRegenerateBlock,
                   onFormatBlock: handleFormatBlock
                 }}
                 onUpdateText={handleUpdateText}
@@ -1965,6 +2224,7 @@ export default function GoodPDF() {
                     onMoveDown={() => handleMoveBlock(i, j, 'down')}
                     onDelete={() => handleDeleteBlock(i, j)}
                     onAIRewrite={() => handleAIRewriteBlock(i, j)}
+                    onRegenerate={() => handleRegenerateBlock(i, j)}
                     onFormatText={(format) => handleFormatBlock(i, j, format)}
                     onUpdateText={handleUpdateText}
                   />
